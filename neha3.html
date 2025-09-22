@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>JOSE Decryptor</title>
+</head>
+<body>
+<h2>Decrypt & Verify JOSE Payload</h2>
+
+<textarea id="joseInput" rows="6" cols="80"
+ placeholder="Paste the full JWS string here"></textarea><br><br>
+<button id="decryptBtn">Decrypt</button>
+
+<pre id="output"></pre>
+
+<script type="module">
+import {
+  compactVerify,
+  compactDecrypt,
+  importJWK
+} from 'https://cdn.jsdelivr.net/npm/jose@5.6.0/+esm';
+
+function toBase64Url(b64) {
+  return b64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
+// ---------- Replace with your actual secrets ----------
+const hmacSecret = "U1lNTUpPU0VFTkNSREVDUioqKioqKioqKioqKioqKio="; // HMAC key (base64)
+const aesSecret  = "U1lNTUpPU0VFTkNSREVDUlNZTU1KT1NFRU5DUkRFQ1I="; // AES key (base64)
+
+const hmacKey = await importJWK({
+  kty: 'oct',
+  k: toBase64Url(hmacSecret),
+  alg: 'HS256'
+}, 'HS256');
+
+const aesKey = await importJWK({
+  kty: 'oct',
+  k: toBase64Url(aesSecret),
+  alg: 'A256GCM'
+}, 'A256GCM');
+
+// ---------- UI handler ----------
+document.getElementById('decryptBtn').addEventListener('click', async () => {
+  const jws = document.getElementById('joseInput').value.trim();
+  const out = document.getElementById('output');
+  out.textContent = "Processing...\n";
+
+  try {
+    // 1️⃣ Verify signature on the outer JWS
+    const { payload: verifiedCiphertext } = await compactVerify(jws, hmacKey);
+    const jwe = new TextDecoder().decode(verifiedCiphertext);
+    out.textContent += "✔ Signature verified\n";
+    out.textContent += "Recovered JWE:\n" + jwe + "\n\n";
+
+    // 2️⃣ Decrypt the JWE to recover original payload
+    const { plaintext } = await compactDecrypt(jwe, aesKey);
+    const message = new TextDecoder().decode(plaintext);
+    out.textContent += "✔ Decrypted payload:\n" + message + "\n";
+  } catch (err) {
+    out.textContent += "❌ Error: " + err.message + "\n";
+    console.error(err);
+  }
+});
+</script>
+</body>
+</html>

@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>JOSE Encrypt & Decrypt Tool</title>
+</head>
+<body>
+<h2>JOSE Encrypt–then–Sign & Verify–then–Decrypt</h2>
+
+<h3>1️⃣ Create JOSE payload</h3>
+<textarea id="plainInput" rows="4" cols="80"
+ placeholder='Enter JSON text, e.g. {"msg":"Hello JOSE!"}'></textarea><br><br>
+<button id="encryptBtn">Encrypt & Sign</button>
+
+<h3>Generated JOSE JWS</h3>
+<pre id="generatedJws"></pre>
+
+<hr>
+
+<h3>2️⃣ Verify & Decrypt existing JWS</h3>
+<textarea id="jwsInput" rows="6" cols="80"
+ placeholder="Paste a JOSE JWS to verify & decrypt"></textarea><br><br>
+<button id="decryptBtn">Verify & Decrypt</button>
+
+<h3>Decrypted Output</h3>
+<pre id="output"></pre>
+
+<script type="module">
+import {
+  CompactSign, CompactEncrypt,
+  compactVerify, compactDecrypt, importJWK
+} from 'https://cdn.jsdelivr.net/npm/jose@5.6.0/+esm';
+
+function toBase64Url(b64) {
+  return b64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
+// ---------- Replace with your actual secrets ----------
+const hmacSecret = "U1lNTUpPU0VFTkNSREVDUioqKioqKioqKioqKioqKio="; // HMAC key (base64)
+const aesSecret  = "U1lNTUpPU0VFTkNSREVDUlNZTU1KT1NFRU5DUkRFQ1I="; // AES key (base64)
+
+// Import keys as JWKs
+const hmacKey = await importJWK({
+  kty: 'oct',
+  k: toBase64Url(hmacSecret),
+  alg: 'HS256'
+}, 'HS256');
+
+const aesKey = await importJWK({
+  kty: 'oct',
+  k: toBase64Url(aesSecret),
+  alg: 'A256GCM'
+}, 'A256GCM');
+
+// ---------- Encrypt & Sign ----------
+document.getElementById('encryptBtn').addEventListener('click', async () => {
+  const input = document.getElementById('plainInput').value.trim();
+  const out = document.getElementById('generatedJws');
+  out.textContent = "Processing...\n";
+
+  try {
+    const payload = new TextEncoder().encode(input);
+
+    // 1️⃣ Encrypt (JWE)
+    const jwe = await new CompactEncrypt(payload)
+      .setProtectedHeader({ alg: 'dir', enc: 'A256GCM' })
+      .encrypt(aesKey);
+
+    // 2️⃣ Sign (JWS) the ciphertext
+    const jws = await new CompactSign(new TextEncoder().encode(jwe))
+      .setProtectedHeader({ alg: 'HS256', typ: 'JWE' })
+      .sign(hmacKey);
+
+    out.textContent = jws;
+    document.getElementById('jwsInput').value = jws; // auto-fill for testing
+  } catch (err) {
+    out.textContent = "❌ Error: " + err.message;
+    console.error(err);
+  }
+});
+
+// ---------- Verify & Decrypt ----------
+document.getElementById('decryptBtn').addEventListener('click', async () => {
+  const jws = document.getElementById('jwsInput').value.trim();
+  const out = document.getElementById('output');
+  out.textContent = "Processing...\n";
+
+  try {
+    // 1️⃣ Verify signature (JWS)
+    const { payload: verifiedCiphertext } = await compactVerify(jws, hmacKey);
+    const jwe = new TextDecoder().decode(verifiedCiphertext);
+    out.textContent += "✔ Signature verified\n";
+
+    // 2️⃣ Decrypt ciphertext (JWE)
+    const { plaintext } = await compactDecrypt(jwe, aesKey);
+    out.textContent += "✔ Decrypted payload:\n" + new TextDecoder().decode(plaintext);
+  } catch (err) {
+    out.textContent += "❌ Error: " + err.message + "\n";
+    console.error(err);
+  }
+});
+</script>
+</body>
+</html>

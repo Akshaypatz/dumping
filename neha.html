@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html>
+<head><meta charset="UTF-8"></head>
+<body>
+<script type="module">
+import {
+  CompactSign, CompactEncrypt,
+  compactVerify, compactDecrypt, importJWK
+} from 'https://cdn.jsdelivr.net/npm/jose@5.6.0/+esm';
+
+function toBase64Url(b64) {
+  return b64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
+const hmacSecret = "U1lNTUpPU0VFTkNSREVDUioqKioqKioqKioqKioqKio="
+const aesSecret  = "U1lNTUpPU0VFTkNSREVDUlNZTU1KT1NFRU5DUkRFQ1I="
+
+const hmacKey = await importJWK({
+  kty: 'oct',
+  k: toBase64Url(hmacSecret),   // ✅ no btoa, just base64url
+  alg: 'HS256'
+}, 'HS256');
+
+const aesKey = await importJWK({
+  kty: 'oct',
+  k: toBase64Url(aesSecret),    // ✅ no btoa, just base64url
+  alg: 'A256GCM'
+}, 'A256GCM');
+
+const payload = new TextEncoder().encode(JSON.stringify({ msg: 'Hello JOSE!' }));
+
+const jws = await new CompactSign(payload)
+  .setProtectedHeader({ alg: 'HS256' })
+  .sign(hmacKey);
+
+const jwe = await new CompactEncrypt(new TextEncoder().encode(jws))
+  .setProtectedHeader({ alg: 'dir', enc: 'A256GCM' })
+  .encrypt(aesKey);
+
+console.log('JWE:', jwe);
+
+const { plaintext: decryptedJws } = await compactDecrypt(jwe, aesKey);
+const { payload: verified } = await compactVerify(new TextDecoder().decode(decryptedJws), hmacKey);
+
+console.log('Verified payload:', new TextDecoder().decode(verified));
+</script>
+</body>
+</html>
